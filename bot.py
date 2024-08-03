@@ -49,15 +49,9 @@ def restore_urls(translated_text, urls, placeholders):
         translated_text = translated_text.replace(placeholder, url)
     return translated_text
 
-# Fonction pour préserver et restaurer les hashtags s'ils ne sont pas des liens
-def preserve_and_restore_hashtags(text, translated_text):
-    hashtag_pattern = re.compile(r'(\s#[^\s]+)')
-    hashtags = hashtag_pattern.findall(text)
-    for hashtag in hashtags:
-        if hashtag not in text:
-            continue
-        translated_text = translated_text.replace(f'HASHTAG_PLACEHOLDER_{hashtags.index(hashtag)}', hashtag)
-    return translated_text
+# Fonction pour retirer "Tweeted" du texte traduit
+def remove_tweeted(translated_text):
+    return re.sub(r'Tweeted', '', translated_text, flags=re.IGNORECASE)
 
 # Définir l'événement pour quand un nouveau message est envoyé
 @client.event
@@ -84,7 +78,7 @@ async def on_message(message):
                 text, urls, url_placeholders = preserve_urls(message.content)
                 translation = translator.translate(text, src='ja', dest='en').text
                 translation = restore_urls(translation, urls, url_placeholders)
-                translation = preserve_and_restore_hashtags(message.content, translation)
+                translation = remove_tweeted(translation)
                 logger.info(f"Translation: {translation}")
                 target_channel = client.get_channel(TARGET_CHANNEL_ID)
                 if target_channel:
@@ -114,7 +108,7 @@ async def on_message(message):
                         # Traduire le texte en anglais
                         translation = translator.translate(text, src='ja', dest='en').text
                         translation = restore_urls(translation, urls, url_placeholders)
-                        translation = preserve_and_restore_hashtags(description, translation)
+                        translation = remove_tweeted(translation)
                         logger.info(f"Translation: {translation}")
                         
                         # Copier l'embed et ajouter la traduction
