@@ -57,6 +57,12 @@ def preserve_and_restore_hashtags(text, translated_text):
         translated_text = translated_text.replace(f'HASHTAG_PLACEHOLDER_{hashtags.index(hashtag)}', hashtag)
     return translated_text
 
+# Fonction pour retirer les lignes contenant "Tweeted" ou "Retweeted" de la traduction
+def remove_tweeted_retweeted_lines_for_translation(text):
+    lines = text.split('\n')
+    filtered_lines = [line for line in lines if not re.search(r'Tweeted|Retweeted', line)]
+    return '\n'.join(filtered_lines)
+
 # Définir l'événement pour quand un nouveau message est envoyé
 @client.event
 async def on_message(message):
@@ -75,22 +81,29 @@ async def on_message(message):
     if message.channel.id == SOURCE_CHANNEL_ID:
         logger.info(f"Message detected in source channel: {message.content}")
 
-        # Traiter les messages normaux sans "Tweeted" ou "Retweeted"
-        if message.content and not re.search(r'Tweeted|Retweeted', message.content):
+        target_channel = client.get_channel(TARGET_CHANNEL_ID)
+        if not target_channel:
+            logger.error(f"Target channel with ID {TARGET_CHANNEL_ID} not found")
+            return
+
+        # Envoyer le message original avec "Tweeted" ou "Retweeted"
+        if message.content:
+            await target_channel.send(message.content)
+
+        # Traiter les messages normaux sans "Tweeted" ou "Retweeted" pour la traduction
+        if message.content:
             try:
                 logger.info("Processing normal message")
-                text, urls, url_placeholders = preserve_urls(message.content)
-                translation = translator.translate(text, src='ja', dest='en').text
-                translation = restore_urls(translation, urls, url_placeholders)
-                translation = preserve_and_restore_hashtags(message.content, translation)
-                logger.info(f"Translation: {translation}")
-                target_channel = client.get_channel(TARGET_CHANNEL_ID)
-                if target_channel:
-                    logger.info(f"Sending message to target channel: {TARGET_CHANNEL_ID}")
-                    await target_channel.send(message.content)
+                text = remove_tweeted_retweeted_lines_for_translation(message.content)
+                if text.strip():  # Vérifier si le texte n'est pas vide
+                    text, urls, url_placeholders = preserve_urls(text)
+                    translation = translator.translate(text, src='ja', dest='en').text
+                    translation = restore_urls(translation, urls, url_placeholders)
+                    translation = preserve_and_restore_hashtags(message.content, translation)
+                    logger.info(f"Translation: {translation}")
                     await target_channel.send(f'Translation (accurate at 90%):\n{translation}')
                 else:
-                    logger.error(f"Target channel with ID {TARGET_CHANNEL_ID} not found")
+                    logger.info("No translatable content found")
             except Exception as e:
                 logger.error(f"Error translating message: {e}")
 
@@ -98,11 +111,6 @@ async def on_message(message):
         if message.embeds:
             logger.info("Embed detected")
             for embed in message.embeds:
-                # Ignorer les embeds de TweetShift
-                if embed.author and 'TweetShift' in embed.author.name:
-                    logger.info("Skipping TweetShift embed")
-                    continue
-
                 # Extraire la description du embed
                 if embed.description:
                     try:
@@ -122,10 +130,8 @@ async def on_message(message):
                         embed_copy = discord.Embed.from_dict(embed.to_dict())
 
                         # Envoyer le nouvel embed avec la traduction dans le canal cible
-                        target_channel = client.get_channel(TARGET_CHANNEL_ID)
                         if target_channel:
                             logger.info(f"Sending embed to target channel: {TARGET_CHANNEL_ID}")
-                            await target_channel.send(embed=embed_copy)
                             await target_channel.send(f'Translation (accurate at 90%):\n{translation}')
                         else:
                             logger.error(f"Target channel with ID {TARGET_CHANNEL_ID} not found")
