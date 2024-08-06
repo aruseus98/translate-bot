@@ -1,4 +1,4 @@
-# translate-bot
+# Discord Translation Bot
 
 This bot is designed to monitor a specified source channel for new messages, translate the content of embedded descriptions, and send both the original and translated content to a target channel. The bot preserves and restores URLs, hashtags, and special links while ignoring specific lines containing "Tweeted" or "Retweeted".  
 
