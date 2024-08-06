@@ -36,7 +36,7 @@ async def on_ready():
 
 # Fonction pour préserver et restaurer les URLs
 def preserve_urls(text):
-    url_pattern = re.compile(r'(https?://\S+)')
+    url_pattern = re.compile(r'(https?://\S+|http?://\S+)')
     urls = url_pattern.findall(text)
     placeholders = [f'URL_PLACEHOLDER_{i}' for i in range(len(urls))]
     for placeholder, url in zip(placeholders, urls):
@@ -53,15 +53,26 @@ def restore_urls(translated_text, urls, placeholders):
 def preserve_and_restore_hashtags(text, translated_text):
     hashtag_pattern = re.compile(r'(\#[^\s]+)')
     hashtags = hashtag_pattern.findall(text)
-    for hashtag in hashtags:
-        translated_text = translated_text.replace(f'HASHTAG_PLACEHOLDER_{hashtags.index(hashtag)}', hashtag)
+    placeholders = [f'HASHTAG_PLACEHOLDER_{i}' for i in range(len(hashtags))]
+    for placeholder, hashtag in zip(placeholders, hashtags):
+        text = text.replace(hashtag, placeholder)
+    for placeholder, hashtag in zip(placeholders, hashtags):
+        translated_text = translated_text.replace(placeholder, hashtag)
     return translated_text
 
-# Fonction pour retirer les lignes contenant "Tweeted" ou "Retweeted" de la traduction
-def remove_tweeted_retweeted_lines_for_translation(text):
-    lines = text.split('\n')
-    filtered_lines = [line for line in lines if not re.search(r'Tweeted|Retweeted', line)]
-    return '\n'.join(filtered_lines)
+# Fonction pour préserver et restaurer les liens spéciaux
+def preserve_special_links(text):
+    special_link_pattern = re.compile(r'\[↧\]\((https?://\S+|http?://\S+)\)|\[▻\]\((https?://\S+|http?://\S+)\)')
+    special_links = special_link_pattern.findall(text)
+    placeholders = [f'SPECIAL_LINK_PLACEHOLDER_{i}' for i in range(len(special_links))]
+    for placeholder, link in zip(placeholders, special_links):
+        text = text.replace(f'[↧]({link})', placeholder) if f'[↧]({link})' in text else text.replace(f'[▻]({link})', placeholder)
+    return text, special_links, placeholders
+
+def restore_special_links(translated_text, special_links, placeholders):
+    for placeholder, link in zip(placeholders, special_links):
+        translated_text = translated_text.replace(placeholder, f'[↧]({link})') if '↧' in placeholder else translated_text.replace(placeholder, f'[▻]({link})')
+    return translated_text
 
 # Définir l'événement pour quand un nouveau message est envoyé
 @client.event
@@ -86,26 +97,9 @@ async def on_message(message):
             logger.error(f"Target channel with ID {TARGET_CHANNEL_ID} not found")
             return
 
-        # Envoyer le message original avec "Tweeted" ou "Retweeted"
+        # Envoyer le message original sans le traduire
         if message.content:
             await target_channel.send(message.content)
-
-        # Traiter les messages normaux sans "Tweeted" ou "Retweeted" pour la traduction
-        if message.content:
-            try:
-                logger.info("Processing normal message")
-                text = remove_tweeted_retweeted_lines_for_translation(message.content)
-                if text.strip():  # Vérifier si le texte n'est pas vide
-                    text, urls, url_placeholders = preserve_urls(text)
-                    translation = translator.translate(text, src='ja', dest='en').text
-                    translation = restore_urls(translation, urls, url_placeholders)
-                    translation = preserve_and_restore_hashtags(message.content, translation)
-                    logger.info(f"Translation: {translation}")
-                    await target_channel.send(f'Translation (accurate at 90%):\n{translation}')
-                else:
-                    logger.info("No translatable content found")
-            except Exception as e:
-                logger.error(f"Error translating message: {e}")
 
         # Vérifier s'il y a un embed dans le message
         if message.embeds:
@@ -117,12 +111,14 @@ async def on_message(message):
                         description = embed.description
                         logger.info(f"Embed description: {description}")
 
-                        # Préserver les URLs dans la description de l'embed
-                        text, urls, url_placeholders = preserve_urls(description)
+                        # Préserver les URLs et les liens spéciaux dans la description de l'embed
+                        text, special_links, special_placeholders = preserve_special_links(description)
+                        text, urls, url_placeholders = preserve_urls(text)
 
                         # Traduire le texte en anglais
                         translation = translator.translate(text, src='ja', dest='en').text
                         translation = restore_urls(translation, urls, url_placeholders)
+                        translation = restore_special_links(translation, special_links, special_placeholders)
                         translation = preserve_and_restore_hashtags(description, translation)
                         logger.info(f"Translation: {translation}")
 
