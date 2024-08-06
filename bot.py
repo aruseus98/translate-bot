@@ -74,6 +74,10 @@ def restore_special_links(translated_text, special_links, placeholders):
         translated_text = translated_text.replace(placeholder, f'[↧]({link})') if '↧' in placeholder else translated_text.replace(placeholder, f'[▻]({link})')
     return translated_text
 
+# Fonction pour détecter la langue du texte
+def detect_language(text):
+    return translator.detect(text).lang
+
 # Définir l'événement pour quand un nouveau message est envoyé
 @client.event
 async def on_message(message):
@@ -111,6 +115,15 @@ async def on_message(message):
                         description = embed.description
                         logger.info(f"Embed description: {description}")
 
+                        # Détecter la langue de la description
+                        detected_lang = detect_language(description)
+                        logger.info(f"Detected language: {detected_lang}")
+
+                        # Si la langue est l'anglais, ne pas traduire
+                        if detected_lang == 'en':
+                            logger.info("Text is already in English, skipping translation.")
+                            continue
+
                         # Préserver les URLs et les liens spéciaux dans la description de l'embed
                         text, special_links, special_placeholders = preserve_special_links(description)
                         text, urls, url_placeholders = preserve_urls(text)
@@ -121,9 +134,6 @@ async def on_message(message):
                         translation = restore_special_links(translation, special_links, special_placeholders)
                         translation = preserve_and_restore_hashtags(description, translation)
                         logger.info(f"Translation: {translation}")
-
-                        # Copier l'embed et ajouter la traduction
-                        embed_copy = discord.Embed.from_dict(embed.to_dict())
 
                         # Envoyer le nouvel embed avec la traduction dans le canal cible
                         if target_channel:
