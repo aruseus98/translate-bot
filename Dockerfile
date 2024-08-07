@@ -11,5 +11,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copier le reste des fichiers du projet, y compris .env
 COPY . .
 
-# Exporter les variables d'environnement du fichier .env
-CMD export $(cat .env | xargs) && python bot.py
+# Créer le répertoire des logs
+RUN mkdir -p /app/logs
+
+# Commande pour démarrer le bot
+CMD ["python", "bot.py"]
